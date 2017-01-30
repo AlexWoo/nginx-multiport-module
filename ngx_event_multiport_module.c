@@ -206,8 +206,12 @@ ngx_event_multiport_init_listening(ngx_cycle_t *cycle, ngx_listening_t *ls,
 
     ngx_memcpy(ls->addr_text.data, text, len);
 
-    u_char *name = ls->addr_text.data + sizeof("unix:") - 1;
-    ngx_delete_file(name);
+#if (NGX_HAVE_UNIX_DOMAIN)
+    if (ls->sockaddr->sa_family == AF_UNIX) {
+        u_char *name = ls->addr_text.data + sizeof("unix:") - 1;
+        ngx_delete_file(name);
+    }
+#endif
 
     ls->fd = (ngx_socket_t) -1;
     ls->type = SOCK_STREAM;
