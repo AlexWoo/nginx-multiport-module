@@ -25,6 +25,18 @@ relationport must configured same as listen directives in http server, rtmp serv
 
 ## API
 
+- ngx\_process\_slot\_get\_slot
+
+		ngx_int_t ngx_process_slot_get_slot(ngx_uint_t wpid);
+
+	- para:
+
+		wpid: worker process id, 0 to ccf->worker_processes - 1
+
+	- return value:
+
+		sucessed return ngx_process_slot, else return -1
+
 
 ## Build
 
@@ -35,11 +47,11 @@ cd to NGINX source directory & run this:
 
 ## Example
 
-See t/ngx_http_timer_test_module.c as reference
+See t/ngx\_http\_process\_slot\_test\_module.c as reference
 
 Build:
 
-	./configure --add-module=/path/to/nginx-timer-module/t/ --add-module=/path/to/nginx-timer-module/
+	./configure --with-debug --add-module=/path/to/nginx-multiport-module/t/ --add-module=/path/to/nginx-multiport-module/
 	make && make install
 
 Configure:
