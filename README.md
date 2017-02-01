@@ -25,6 +25,26 @@ relationport must configured same as listen directives in http server, rtmp serv
 
 ## API
 
+- ngx\_event\_multiport\_get\_multiport
+
+		socklen_t ngx_event_multiport_get_multiport(struct sockaddr *sa, ngx_str_t *multiport, ngx_int_t pslot)
+
+	- para:
+
+		sa: return sockaddr of multiport, sa must alloc memory for store sockaddr
+		multiport: base multiport configure in multi\_listen of event block, multiport format support bellow:
+		
+			port only: port
+			IPv4: host:port     host must be ipaddr of IPv4 or *
+			IPv6: [host]:port   host must be ipaddr of IPv6
+			Unix: unix:/path
+		
+		pslot: process\_slot, process\_slot of other worker process can get through ngx\_process\_slot\_get\_slot
+
+	- return value:
+
+		socklen of sa, 0 for failed
+
 - ngx\_process\_slot\_get\_slot
 
 		ngx_int_t ngx_process_slot_get_slot(ngx_uint_t wpid);
