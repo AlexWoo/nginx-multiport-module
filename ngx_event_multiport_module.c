@@ -1004,6 +1004,7 @@ ngx_event_multiport_set_port(ngx_cycle_t *cycle,
     struct sockaddr             sa;
     socklen_t                   socklen;
 
+    ngx_memzero(&sa, sizeof(sa));
     socklen = ngx_event_multiport_get_multiport(&sa, &mls->multiport,
                                                 ngx_process_slot);
     if (socklen == 0) {
