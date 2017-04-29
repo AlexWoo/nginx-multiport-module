@@ -1122,6 +1122,10 @@ ngx_event_multiport_process_init(ngx_cycle_t *cycle)
     ngx_listening_t                *rls;
     ngx_uint_t                      i;
 
+    if (ngx_process != NGX_PROCESS_WORKER) {
+        return NGX_OK;
+    }
+
     emcf = ngx_event_get_conf(cycle->conf_ctx, ngx_event_multiport_module);
     if (emcf->ports == NULL) {
         return NGX_OK;
@@ -1160,6 +1164,10 @@ ngx_event_multiport_process_exit(ngx_cycle_t *cycle)
     ngx_event_multiport_conf_t     *emcf;
     ngx_event_multiport_listen_t   *mls;
     ngx_uint_t                      i;
+
+    if (ngx_process != NGX_PROCESS_WORKER) {
+        return;
+    }
 
     emcf = ngx_event_get_conf(cycle->conf_ctx, ngx_event_multiport_module);
     if (emcf->ports == NULL) {
