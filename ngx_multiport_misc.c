@@ -3,7 +3,7 @@
 
 
 static ngx_int_t
-ngx_event_multiport_get_port_unix(ngx_pool_t *pool, ngx_str_t *port,
+ngx_multiport_get_port_unix(ngx_pool_t *pool, ngx_str_t *port,
         ngx_str_t *multiport, ngx_int_t pslot)
 {
 #if (NGX_HAVE_UNIX_DOMAIN)
@@ -29,7 +29,7 @@ ngx_event_multiport_get_port_unix(ngx_pool_t *pool, ngx_str_t *port,
 }
 
 static ngx_int_t
-ngx_event_multiport_get_port_inet6(ngx_pool_t *pool, ngx_str_t *port,
+ngx_multiport_get_port_inet6(ngx_pool_t *pool, ngx_str_t *port,
         ngx_str_t *multiport, ngx_int_t pslot)
 {
 #if (NGX_HAVE_INET6)
@@ -85,7 +85,7 @@ ngx_event_multiport_get_port_inet6(ngx_pool_t *pool, ngx_str_t *port,
 }
 
 static ngx_int_t
-ngx_event_multiport_get_port_inet(ngx_pool_t *pool, ngx_str_t *port,
+ngx_multiport_get_port_inet(ngx_pool_t *pool, ngx_str_t *port,
         ngx_str_t *multiport, ngx_int_t pslot)
 {
     u_char                         *p, *last;
@@ -138,7 +138,7 @@ ngx_event_multiport_get_port_inet(ngx_pool_t *pool, ngx_str_t *port,
 }
 
 ngx_int_t
-ngx_event_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port,
+ngx_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port,
         ngx_str_t *multiport, ngx_int_t pslot)
 {
     u_char                         *p;
@@ -154,12 +154,12 @@ ngx_event_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port,
     }
 
     if (len >= 5 && ngx_strncasecmp(p, (u_char *) "unix:", 5) == 0) {
-        return ngx_event_multiport_get_port_unix(pool, port, multiport, pslot);
+        return ngx_multiport_get_port_unix(pool, port, multiport, pslot);
     }
 
     if (len && p[0] == '[') {
-        return ngx_event_multiport_get_port_inet6(pool, port, multiport, pslot);
+        return ngx_multiport_get_port_inet6(pool, port, multiport, pslot);
     }
 
-    return ngx_event_multiport_get_port_inet(pool, port, multiport, pslot);
+    return ngx_multiport_get_port_inet(pool, port, multiport, pslot);
 }

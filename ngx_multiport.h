@@ -24,7 +24,17 @@
  *          Unix: unix:/path
  *      pslot: process_slot
  */
-ngx_int_t ngx_event_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port,
+ngx_int_t ngx_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port,
         ngx_str_t *multiport, ngx_int_t pslot);
+
+
+/*
+ * return value:
+ *      ngx_process_slot for successd, NGX_ERROR for failed
+ * paras:
+ *      wpid: worker process id, 0 to ccf->worker_processes - 1
+ */
+ngx_int_t ngx_multiport_get_slot(ngx_uint_t wpid);
+
 
 #endif

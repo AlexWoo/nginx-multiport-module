@@ -827,8 +827,8 @@ ngx_event_multiport_set_port(ngx_cycle_t *cycle,
 
     ngx_memzero(&port, sizeof(ngx_str_t));
 
-    rc = ngx_event_multiport_get_port(cycle->pool, &port, &mls->multiport,
-                                      ngx_process_slot);
+    rc = ngx_multiport_get_port(cycle->pool, &port, &mls->multiport,
+                                ngx_process_slot);
     if (rc == NGX_ERROR) {
         ngx_log_error(NGX_LOG_ERR, cycle->log, 0,
                 "multiport, get multiport error");

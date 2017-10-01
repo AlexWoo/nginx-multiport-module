@@ -64,7 +64,7 @@ ngx_multiport_test_get_port(ngx_http_request_t *r, char *multiport,
     mp.len = ngx_strlen(multiport);
 
     ngx_memzero(&port, sizeof(ngx_str_t));
-    rc = ngx_event_multiport_get_port(r->pool, &port, &mp, pslot);
+    rc = ngx_multiport_get_port(r->pool, &port, &mp, pslot);
     if (port.len) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "port: %V, %s, %d",
                 &port, port.data, port.len);
@@ -90,6 +90,7 @@ ngx_multiport_test_handler(ngx_http_request_t *r)
 
     NGX_TEST_INIT
 
+    /* test ngx_multiport_get_port */
     /* normal format */
     NGX_TEST_ISOK(ngx_multiport_test_get_port(r, "10", 127, "137"));
     NGX_TEST_ISOK(ngx_multiport_test_get_port(r, "127.0.0.1:55635", 4,
@@ -116,6 +117,13 @@ ngx_multiport_test_handler(ngx_http_request_t *r)
     /* pslot error */
     NGX_TEST_ISOK(ngx_multiport_test_get_port(r, "65410", -1, NULL));
     NGX_TEST_ISOK(ngx_multiport_test_get_port(r, "65410", 128, NULL));
+
+    /* test ngx_multiport_get_slot */
+    NGX_TEST_ISOK(ngx_multiport_get_slot(4) == -1);
+    NGX_TEST_ISOK(ngx_multiport_get_slot(0) == 0);
+    NGX_TEST_ISOK(ngx_multiport_get_slot(1) == 1);
+    NGX_TEST_ISOK(ngx_multiport_get_slot(2) == 2);
+    NGX_TEST_ISOK(ngx_multiport_get_slot(3) == 3);
 
     r->headers_out.status = NGX_HTTP_OK;
 

@@ -37,7 +37,7 @@ nbuckets is recommended use a prime number
 
 ## API
 
-- ngx\_event\_multiport\_get\_port
+- ngx\_multiport\_get\_port
 
 		ngx_int_t ngx_event_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port, ngx_str_t *multiport, ngx_int_t pslot);
 
@@ -58,9 +58,9 @@ nbuckets is recommended use a prime number
 
 		NGX\_OK for successd, NGX\_ERROR for failed
 
-- ngx\_process\_slot\_get\_slot
+- ngx\_multiport\_get\_slot
 
-		ngx_int_t ngx_process_slot_get_slot(ngx_uint_t wpid);
+		ngx_int_t ngx_multiport_get_slot(ngx_uint_t wpid);
 
 	- para:
 
@@ -68,7 +68,7 @@ nbuckets is recommended use a prime number
 
 	- return value:
 
-		sucessed return ngx_process_slot, else return -1
+		ngx_process_slot for successd, NGX_ERROR for failed
 
 - ngx\_stream\_zone\_insert\_stream
 
@@ -93,12 +93,12 @@ cd to NGINX source directory & run this:
 
 See t/ngx\_http\_process\_slot\_test\_module.c as reference
 
-Build:
+**Build**:
 
 	./configure --with-debug --with-ipv6 --add-module=/path/to/nginx-multiport-module/t/ --add-module=/path/to/nginx-multiport-module/
 	make && make install
 
-Configure:
+**Configure**:
 
 	worker_processes  4;
 
@@ -110,7 +110,12 @@ Configure:
 		multi_listen unix:/tmp/http.sock.80 80;
 	}
 
-Test for multiport:
+**Test for API**:
+
+	$ curl http://192.168.84.254/multiport_test/123
+	TEST cases 19, 19 pass
+
+**Test for multiport**:
 
 	curl -v http://127.0.0.1/
 	curl -v http://127.0.0.1:9000/
@@ -125,7 +130,7 @@ Test for multiport:
 
 Tests will get the same result, for port 9000 will always send to worker process 0, 9001 to worker process 1 and so on
 
-Test for stream zone:
+**Test for stream zone:**
 
 	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=123"
 	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=123456"

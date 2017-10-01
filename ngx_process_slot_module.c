@@ -138,7 +138,7 @@ ngx_process_slot_process_exit(ngx_cycle_t *cycle)
 }
 
 ngx_int_t
-ngx_process_slot_get_slot(ngx_uint_t wpid)
+ngx_multiport_get_slot(ngx_uint_t wpid)
 {
     ngx_process_slot_conf_t    *pscf;
     ngx_process_slot_ctx_t     *ctx;
@@ -157,26 +157,3 @@ ngx_process_slot_get_slot(ngx_uint_t wpid)
 
     return ctx->process_slot[wpid];
 }
-
-void
-ngx_process_slot_print()
-{
-#if (NGX_DEBUG)
-    ngx_process_slot_conf_t    *pscf;
-    ngx_process_slot_ctx_t     *ctx;
-    ngx_core_conf_t            *ccf;
-    ngx_int_t                  i;
-
-    ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
-                                           ngx_core_module);
-    pscf = (ngx_process_slot_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
-                                                    ngx_process_slot_module);
-    ctx = pscf->ctx;
-
-    for (i = 0; i < ccf->worker_processes; ++i) {
-        ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0,
-                "[PROCESS SLOT]process_slot[%ui]=%ui", i, ctx->process_slot[i]);
-    }
-#endif
-}
-
