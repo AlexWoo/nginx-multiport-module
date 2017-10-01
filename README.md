@@ -37,14 +37,15 @@ nbuckets is recommended use a prime number
 
 ## API
 
-- ngx\_event\_multiport\_get\_multiport
+- ngx\_event\_multiport\_get\_port
 
-		socklen_t ngx_event_multiport_get_multiport(struct sockaddr *sa, ngx_str_t *multiport, ngx_int_t pslot)
+		ngx_int_t ngx_event_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port, ngx_str_t *multiport, ngx_int_t pslot);
 
 	- para:
 
-		sa: return sockaddr of multiport, sa must alloc memory for store sockaddr
-		multiport: base multiport configure in multi\_listen of event block, multiport format support bellow:
+		pool: pool for port memory alloc
+		port: process real listen port while process\_slot is pslot
+		multiport: port configure for processes, format as below:
 		
 			port only: port
 			IPv4: host:port     host must be ipaddr of IPv4 or *
@@ -55,7 +56,7 @@ nbuckets is recommended use a prime number
 
 	- return value:
 
-		socklen of sa, 0 for failed
+		NGX\_OK for successd, NGX\_ERROR for failed
 
 - ngx\_process\_slot\_get\_slot
 
@@ -94,7 +95,7 @@ See t/ngx\_http\_process\_slot\_test\_module.c as reference
 
 Build:
 
-	./configure --with-debug --add-module=/path/to/nginx-multiport-module/t/ --add-module=/path/to/nginx-multiport-module/
+	./configure --with-debug --with-ipv6 --add-module=/path/to/nginx-multiport-module/t/ --add-module=/path/to/nginx-multiport-module/
 	make && make install
 
 Configure:

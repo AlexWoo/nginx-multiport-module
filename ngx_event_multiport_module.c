@@ -6,6 +6,7 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_event.h>
+#include "ngx_multiport.h"
 
 
 static ngx_int_t ngx_event_multiport_process_init(ngx_cycle_t *cycle);
@@ -154,187 +155,6 @@ ngx_event_multiport_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     mls->relatedport = value[2];
 
     return NGX_CONF_OK;
-}
-
-
-/* unix:/path */
-static socklen_t
-ngx_event_multiport_get_unix_domain(struct sockaddr *sa,
-        ngx_str_t *multiport, ngx_int_t pslot)
-{
-#if (NGX_HAVE_UNIX_DOMAIN)
-    u_char                     *path;
-    size_t                      len;
-    struct sockaddr_un         *saun;
-
-    path = multiport->data + 5;
-    len = multiport->len - 5;
-
-    if (len == 0) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, no path in unix domain socket");
-        return 0;
-    }
-
-    len += 5; /* for '.pslot\0' pslot between 0 and 128 */
-
-    if (len > sizeof(saun->sun_path)) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, too long path in the unix domain socket");
-        return 0;
-    }
-
-    saun = (struct sockaddr_un *) sa;
-    saun->sun_family = AF_UNIX;
-    (void) ngx_snprintf((u_char *) saun->sun_path, len, "%s.%i", path, pslot);
-
-    return sizeof(struct sockaddr_un);
-#else
-    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                  "multiport, the unix domain sockets not support");
-    return 0;
-#endif
-}
-
-/* [host]:port */
-static socklen_t
-ngx_event_multiport_get_inet6_url(struct sockaddr *sa,
-        ngx_str_t *multiport, ngx_int_t pslot)
-{
-#if (NGX_HAVE_INET6)
-    u_char                     *p, *host, *port, *last;
-    size_t                      len;
-    struct sockaddr_in6        *sin6;
-    ngx_int_t                   n;
-
-    sin6 = (struct sockaddr_in6 *) sa;
-    sin6->sin6_family = AF_INET6;
-
-    host = multiport->data + 1;                 /* host to host */
-    last = multiport->data + multiport->len;
-    p = ngx_strlchr(host, last, ']');           /* p to ']' */
-
-    if (p == NULL) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, invalid INET6 host");
-        return 0;
-    }
-
-    port = p + 1;                               /* port to ':' */
-    if (p == last || *port != ':') {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, no port");
-        return 0;
-    }
-
-    ++port;
-    len = last - port;
-    n = ngx_atoi(port, len);
-
-    if (n < 1 || n + pslot > 65535) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, invalid port");
-        return 0;
-    }
-    sin6->sin6_port = htons((int_port_t) (n + pslot));
-
-    len = p - host;
-    if (len == 0) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, no host");
-        return 0;
-    }
-
-    if (ngx_inet6_addr(host, len, sin6->sin_addr.s6_addr) != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, invalid IPv6 address");
-        return 0;
-    }
-
-    return sizeof(struct sockaddr_in6);
-#else
-    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                  "multiport, the INET6 sockets not support");
-    return 0;
-#endif
-}
-
-/* port or host:port */
-static socklen_t
-ngx_event_multiport_get_inet_url(struct sockaddr *sa,
-        ngx_str_t *multiport, ngx_int_t pslot)
-{
-    u_char                     *host, *port, *last;
-    size_t                      len;
-    ngx_int_t                   n;
-    struct sockaddr_in         *sin;
-
-    sin = (struct sockaddr_in *) sa;
-    sin->sin_family = AF_INET;
-
-    host = multiport->data;
-    last = multiport->data + multiport->len;
-    port = ngx_strlchr(host, last, ':');
-
-    if (port) { /* host:port */
-        len = port - host;
-        ++port;
-    } else { /* port */
-        port = host;
-        len = 0;
-    }
-
-    if (len != 0) {
-        if (len == 1 && *host == '*') {
-            sin->sin_addr.s_addr = INADDR_ANY;
-        } else {
-            sin->sin_addr.s_addr = ngx_inet_addr(host, len);
-            if (sin->sin_addr.s_addr == INADDR_NONE) {
-                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                              "multiport, invalid INET addr");
-                return 0;
-            }
-        }
-    }
-
-    /* parse port */
-    len = last - port;
-    n = ngx_atoi(port, len);
-
-    if (n < 1 || n + pslot > 65535) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                      "multiport, invalid port");
-        return 0;
-    }
-
-    sin->sin_port = htons((in_port_t) (n + pslot));
-
-    return sizeof(struct sockaddr_in);
-}
-
-/*
- * Parse multiport, we do not use ngx_parse_url
- * because we don't want use pool here
- */
-socklen_t
-ngx_event_multiport_get_multiport(struct sockaddr *sa,
-        ngx_str_t *multiport, ngx_int_t pslot)
-{
-    u_char                     *p;
-    size_t                      len;
-
-    p = multiport->data;
-    len = multiport->len;
-
-    if (len >= 5 && ngx_strncasecmp(p, (u_char *) "unix:", 5) == 0) {
-        return ngx_event_multiport_get_unix_domain(sa, multiport, pslot);
-    }
-
-    if (len && p[0] == '[') {
-        return ngx_event_multiport_get_inet6_url(sa, multiport, pslot);
-    }
-
-    return ngx_event_multiport_get_inet_url(sa, multiport, pslot);
 }
 
 
@@ -1001,21 +821,37 @@ static ngx_int_t
 ngx_event_multiport_set_port(ngx_cycle_t *cycle,
         ngx_event_multiport_listen_t *mls, ngx_listening_t *ls)
 {
-    struct sockaddr             sa;
-    socklen_t                   socklen;
+    ngx_str_t                   port;
+    ngx_int_t                   rc;
+    ngx_url_t                   u;
 
-    ngx_memzero(&sa, sizeof(sa));
-    socklen = ngx_event_multiport_get_multiport(&sa, &mls->multiport,
-                                                ngx_process_slot);
-    if (socklen == 0) {
+    ngx_memzero(&port, sizeof(ngx_str_t));
+
+    rc = ngx_event_multiport_get_port(cycle->pool, &port, &mls->multiport,
+                                      ngx_process_slot);
+    if (rc == NGX_ERROR) {
         ngx_log_error(NGX_LOG_ERR, cycle->log, 0,
-                      "multiport, get multiport error");
+                "multiport, get multiport error");
+        return NGX_ERROR;
+    }
+
+    ngx_memzero(&u, sizeof(ngx_url_t));
+    u.url = port;
+    u.listen = 1;
+    u.default_port = 0;
+
+    if (ngx_parse_url(cycle->pool, &u) != NGX_OK) {
+        if (u.err) {
+            ngx_log_error(NGX_LOG_ERR, cycle->log, 0,
+                    "multiport, %s in \"%V\" when set port", u.err, &u.url);
+        }
+
         return NGX_ERROR;
     }
 
     /* init multiport listening */
     if (ngx_event_multiport_init_listening(cycle, &mls->listening,
-            &sa, socklen, ls) != NGX_OK)
+            (struct sockaddr *) &u.sockaddr, u.socklen, ls) != NGX_OK)
     {
         ngx_log_error(NGX_LOG_ERR, cycle->log, 0,
                       "multiport, init listening error: %V", &mls->multiport);
@@ -1180,4 +1016,3 @@ ngx_event_multiport_process_exit(ngx_cycle_t *cycle)
         ngx_event_multiport_close_listening_sock(cycle, &mls[i].listening);
     }
 }
-
