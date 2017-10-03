@@ -5,6 +5,7 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
+#include <ngx_http.h>
 
 
 static ngx_int_t ngx_stream_zone_init_process(ngx_cycle_t *cycle);
@@ -34,15 +35,16 @@ typedef struct {
     ngx_int_t                           nstreams;
 
     ngx_shm_zone_t                     *shm_zone;
-    ngx_stream_zone_hash_t             *hash;
-    ngx_stream_zone_node_t             *stream_node;
-    ngx_int_t                          *free_node;
+    ngx_stream_zone_hash_t             *hash;       /* hash in shm */
+    ngx_stream_zone_node_t             *stream_node;/* node in shm */
+    ngx_int_t                          *free_node;  /* free node chain */
+    ngx_int_t                          *alloc;      /* node number in use*/
 } ngx_stream_zone_conf_t;
 
 
 static ngx_command_t  ngx_stream_zone_commands[] = {
 
-    { ngx_string("rtmp_stream_zone"),
+    { ngx_string("stream_zone"),
       NGX_MAIN_CONF|NGX_DIRECT_CONF|NGX_CONF_TAKE2,
       ngx_stream_zone,
       0,
@@ -96,6 +98,8 @@ ngx_stream_zone_get_node(ngx_str_t *name, ngx_int_t pslot)
     node->slot = pslot;
     node->next = -1;
 
+    ++*szcf->alloc;
+
     return node;
 }
 
@@ -112,6 +116,8 @@ ngx_stream_zone_put_node(ngx_int_t idx)
 
     node->next = *szcf->free_node;
     *szcf->free_node = idx;
+
+    --*szcf->alloc;
 }
 
 static void *
@@ -205,6 +211,9 @@ ngx_stream_zone_shm_init(ngx_shm_t *shm, ngx_stream_zone_conf_t *szcf)
     p += sizeof(ngx_stream_zone_node_t) * szcf->nstreams;
 
     szcf->free_node = (ngx_int_t *) p;
+    p += sizeof(ngx_int_t);
+
+    szcf->alloc = (ngx_int_t *) p;
 
     /* init shm zone */
     for (i = 0; i < szcf->nbuckets; ++i) {
@@ -224,6 +233,7 @@ ngx_stream_zone_shm_init(ngx_shm_t *shm, ngx_stream_zone_conf_t *szcf)
     } while (i);
 
     *szcf->free_node = i;
+    *szcf->alloc = 0;
 }
 
 static char *
@@ -271,7 +281,7 @@ ngx_stream_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     /* create shm zone */
     len = sizeof(ngx_stream_zone_hash_t) * szcf->nbuckets
         + sizeof(ngx_stream_zone_node_t) * szcf->nstreams
-        + sizeof(ngx_int_t);
+        + sizeof(ngx_int_t) + sizeof(ngx_int_t);
 
     shm.size = len;
     shm.name = stream_zone_key;
@@ -308,7 +318,8 @@ ngx_stream_zone_insert_stream(ngx_str_t *name)
     i = szcf->hash[idx].node;
     pslot = -1;
     while (i != -1) {
-        if (ngx_strncmp(szcf->stream_node[i].name, name->data, name->len)
+        if (ngx_strlen(szcf->stream_node[i].name) == name->len
+            && ngx_memcmp(szcf->stream_node[i].name, name->data, name->len)
                 == 0)
         {
             pslot = szcf->stream_node[i].slot;
@@ -356,9 +367,14 @@ ngx_stream_zone_delete_stream(ngx_str_t *name)
     cur = -1;
     next = szcf->hash[idx].node;
     while (next != -1) {
-        if (ngx_strncmp(szcf->stream_node[next].name, name->data, name->len)
+        if (ngx_strlen(szcf->stream_node[next].name) == name->len
+            && ngx_memcmp(szcf->stream_node[next].name, name->data, name->len)
                 == 0)
         {
+            if (szcf->stream_node[next].slot != ngx_process_slot) {
+                break;
+            }
+
             if (cur == -1) { /* link header */
                 szcf->hash[idx].node = szcf->stream_node[next].next;
             } else {
@@ -374,38 +390,67 @@ ngx_stream_zone_delete_stream(ngx_str_t *name)
     ngx_unlock(&szcf->hash[idx].lock);
 }
 
-void ngx_stream_zone_print()
+ngx_chain_t *
+ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
 {
-#if (NGX_DEBUG)
     ngx_stream_zone_conf_t             *szcf;
-    ngx_int_t                           idx, i;
+    ngx_chain_t                        *cl;
+    ngx_buf_t                          *b;
+    size_t                              len;
+    ngx_int_t                           idx, next;
 
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                       ngx_stream_zone_module);
 
-    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "!!!!!!! hash table");
-    for (idx = 0; idx < szcf->nbuckets; ++idx) {
-        if (szcf->hash[idx].node != -1) {
-            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                    "  !!!!!!! idx %i", idx);
-            i = szcf->hash[idx].node;
-            while (i != -1) {
-                ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
-                        "    [%i]%s: %i %i", szcf->stream_node[i].idx,
-                        szcf->stream_node[i].name, szcf->stream_node[i].slot,
-                        szcf->stream_node[i].next);
-                i = szcf->stream_node[i].next;
+    if (szcf->nbuckets <= 0 || szcf->nstreams <= 0) {
+        return NULL;
+    }
+
+    len = sizeof("ngx_stream_zone_buckets: \n") - 1 + NGX_OFF_T_LEN
+        + sizeof("ngx_stream_zone_streams: \n") - 1 + NGX_OFF_T_LEN
+        + sizeof("ngx_stream_zone_alloc: \n") - 1 + NGX_OFF_T_LEN;
+
+    cl = ngx_alloc_chain_link(r->pool);
+    if (cl == NULL) {
+        return NULL;
+    }
+    cl->next = NULL;
+
+    b = ngx_create_temp_buf(r->pool, len);
+    if (b == NULL) {
+        return NULL;
+    }
+    cl->buf = b;
+
+    b->last = ngx_snprintf(b->last, len, "ngx_stream_zone_buckets: %i\n"
+            "ngx_stream_zone_streams: %i\nngx_stream_zone_alloc: %i\n",
+            szcf->nbuckets, szcf->nstreams, *szcf->alloc);
+
+    if (detail) {
+        for (idx = 0; idx < szcf->nbuckets; ++idx) {
+            ngx_spinlock(&szcf->hash[idx].lock, 1, 2048);
+
+            next = szcf->hash[idx].node;
+            if (next == -1) {
+                ngx_unlock(&szcf->hash[idx].lock);
+                continue;
             }
+            ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "slot: %i", idx);
+
+            while (next != -1) {
+                ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                        "\t\tname:%s, slot:%i, idx:%i, next:%i",
+                        szcf->stream_node[next].name,
+                        szcf->stream_node[next].slot,
+                        szcf->stream_node[next].idx,
+                        szcf->stream_node[next].next);
+
+                next = szcf->stream_node[next].next;
+            }
+
+            ngx_unlock(&szcf->hash[idx].lock);
         }
     }
 
-    ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "!!!!!!! free node");
-    i = *szcf->free_node;
-    while (i != -1) {
-        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0, "    %i: %i",
-                szcf->stream_node[i].idx, szcf->stream_node[i].next);
-        i = szcf->stream_node[i].next;
-    }
-#endif
+    return cl;
 }
-

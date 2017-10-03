@@ -2,7 +2,11 @@
 ---
 ## Instructions
 
-Independent port for per nginx worker process
+Every worker process can bind own port, user can visit specific worker process by using the port.
+
+- [ngx-stream-zone-module](doc/ngx-stream-zone-module.md)
+
+	Record stream's owner worker process slot
 
 ## Directives
 
@@ -24,16 +28,6 @@ when configured with unix path, worker will listen path plus with suffix of work
 
 
 relationport must configured same as listen directives in http server, rtmp server, stream server or other server
-
-### rtmp\_stream\_zone
-
-	Syntax  : rtmp_stream_zone buckets=$nbuckets streams=$nstreams;
-	Default : None;
-	Context : main
-
-rtmp\_stream\_zone record stream's owner worker process, nbuckets is hash buckect number, nstreams is max streams number system support
-
-nbuckets is recommended use a prime number
 
 ## API
 
@@ -69,18 +63,6 @@ nbuckets is recommended use a prime number
 	- return value:
 
 		ngx_process_slot for successd, NGX_ERROR for failed
-
-- ngx\_stream\_zone\_insert\_stream
-
-		ngx_int_t ngx_stream_zone_insert_stream(ngx_str_t *name);
-
-	- para:
-
-		name: stream name
-
-	- return value:
-
-		process\_slot for owner of stream, NGX\_ERROR for error
 
 ## Build
 
@@ -129,26 +111,3 @@ See t/ngx\_http\_process\_slot\_test\_module.c as reference
 	curl -v --unix-socket /tmp/http.sock.80.3 http:/
 
 Tests will get the same result, for port 9000 will always send to worker process 0, 9001 to worker process 1 and so on
-
-**Test for stream zone:**
-
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=123"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=123456"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test1"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test2"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test3"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test4"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test5"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test6"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test7"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test8"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test9"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test10"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=add&stream=test11"
-	
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=prt&stream=test3"
-	
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=del&stream=123456"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=del&stream=test2"
-	curl -v "http://127.0.0.1/stream_zone_test/ab?op=del&stream=test"
