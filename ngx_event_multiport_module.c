@@ -806,7 +806,7 @@ ngx_event_multiport_find_relation_port(ngx_cycle_t *cycle, ngx_str_t *str)
     for (i = 0; i < cycle->listening.nelts; ++i) {
 
         if (ls[i].socklen == u.socklen
-                && ngx_memcmp(ls[i].sockaddr, u.sockaddr, u.socklen) == 0)
+                && ngx_memcmp(ls[i].sockaddr, &u.sockaddr, u.socklen) == 0)
         {
             return &ls[i];
         }
