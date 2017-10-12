@@ -8,6 +8,10 @@ Every worker process can bind own port, user can visit specific worker process b
 
 	Record stream's owner worker process slot
 
+- [ngx-http-broadcast-module](doc/ngx-http-broadcast-module.md)
+
+	Broadcast HTTP request to all worker processes when receive HTTP request
+
 ## Directives
 
 ### multi_listen

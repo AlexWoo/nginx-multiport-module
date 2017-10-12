@@ -9,14 +9,16 @@ CORE_MODULES="$CORE_MODULES                                         \
              ngx_stream_zone_module                                 \
              "
 
-HTTP_MODULES="$HTTP_MODULES                                         \
-             "
+HTTP_FILTER_MODULES="$HTTP_FILTER_MODULES                           \
+                    ngx_http_broadcast_module                       \
+                    "
 
 NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                $ngx_addon_dir/ngx_multiport_misc.c                  \
                $ngx_addon_dir/ngx_event_multiport_module.c          \
                $ngx_addon_dir/ngx_process_slot_module.c             \
                $ngx_addon_dir/ngx_stream_zone_module.c              \
+               $ngx_addon_dir/ngx_http_broadcast_module.c           \
                "
 
 NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \
