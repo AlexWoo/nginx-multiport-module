@@ -11,6 +11,7 @@ CORE_MODULES="$CORE_MODULES                                         \
 
 HTTP_FILTER_MODULES="$HTTP_FILTER_MODULES                           \
                     ngx_http_broadcast_module                       \
+                    ngx_http_inner_proxy_module                     \
                     "
 
 NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
@@ -19,6 +20,7 @@ NGX_ADDON_SRCS="$NGX_ADDON_SRCS                                     \
                $ngx_addon_dir/ngx_process_slot_module.c             \
                $ngx_addon_dir/ngx_stream_zone_module.c              \
                $ngx_addon_dir/ngx_http_broadcast_module.c           \
+               $ngx_addon_dir/ngx_http_inner_proxy_module.c         \
                "
 
 NGX_ADDON_DEPS="$NGX_ADDON_DEPS                                     \

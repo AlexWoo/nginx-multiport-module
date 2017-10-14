@@ -188,7 +188,7 @@ ngx_http_broadcast_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
     ngx_core_conf_t            *ccf;
     ngx_int_t                   rc;
     ngx_buf_t                  *b;
-    ngx_chain_t                 cl, *l;
+    ngx_chain_t                 cl;
 
     hbcf = ngx_http_get_module_loc_conf(r->main, ngx_http_broadcast_module);
 
@@ -245,8 +245,6 @@ ngx_http_broadcast_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
     cl.buf = b;
     cl.next = NULL;
-    (void) cl;
-    (void) *l;
 
     return ngx_http_next_body_filter(r, &cl);
 }

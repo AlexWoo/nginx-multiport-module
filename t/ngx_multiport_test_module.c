@@ -84,9 +84,21 @@ ngx_multiport_test_handler(ngx_http_request_t *r)
     ngx_buf_t                  *b;
     ngx_chain_t                 cl;
     size_t                      len;
+    ngx_int_t                   rc;
 
     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "multiport test handler");
+
+    if (ngx_worker != 0) {
+        rc = ngx_http_inner_proxy_request(r, 0);
+        if (rc != NGX_DECLINED) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                    "inner proxy return %i", rc);
+            return rc;
+        }
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                "inner proxy not configured");
+    }
 
     NGX_TEST_INIT
 
@@ -129,15 +141,15 @@ ngx_multiport_test_handler(ngx_http_request_t *r)
 
     ngx_http_send_header(r);
 
-    len = sizeof("TEST cases 4294967296, 4294967296 pass\n") - 1;
+    len = sizeof("pslot: %i TEST cases 4294967296, 4294967296 pass\n") - 1;
     b = ngx_create_temp_buf(r->pool, len);
 
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    b->last = ngx_snprintf(b->last, len, "TEST cases %d, %d pass\n",
-            count, pass);
+    b->last = ngx_snprintf(b->last, len, "pslot: %i TEST cases %d, %d pass\n",
+            ngx_process_slot, count, pass);
     b->last_buf = 1;
     b->last_in_chain = 1;
 

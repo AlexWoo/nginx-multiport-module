@@ -9,6 +9,7 @@
 
 #include <ngx_config.h>
 #include <ngx_core.h>
+#include <ngx_http.h>
 
 
 /*
@@ -35,6 +36,18 @@ ngx_int_t ngx_multiport_get_port(ngx_pool_t *pool, ngx_str_t *port,
  *      wpid: worker process id, 0 to ccf->worker_processes - 1
  */
 ngx_int_t ngx_multiport_get_slot(ngx_uint_t wpid);
+
+
+/*
+ * return value:
+ *      NGX_OK      : for successd
+ *      NGX_ERROR   : for failed
+ *      NGX_DECLINED: for not configured
+ * paras:
+ *      r   : http request for send inner request to sibling worker
+ *      wpid: sibling worker process id
+ */
+ngx_int_t ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid);
 
 
 #endif

@@ -14,7 +14,7 @@ Every worker process can bind own port, user can visit specific worker process b
 
 ## Directives
 
-### multi_listen
+### multi\_listen
 
 	Syntax  : multi_listen multiport relationport;
 	Default : None;
@@ -32,6 +32,29 @@ when configured with unix path, worker will listen path plus with suffix of work
 
 
 relationport must configured same as listen directives in http server, rtmp server, stream server or other server
+
+### inner\_proxy
+
+	Syntax  : inner_proxy multiport uri;
+	Default : None;
+	Context : http, server, location
+
+- multiport: configured in multi_listen
+- uri: uri for inner_proxy, configured as below
+
+        location /multiport_test/ {
+            inner_proxy unix:/tmp/http.sock.80 /inner_proxy;
+            multiport_test;
+        }
+
+        location /inner_proxy/ {
+            rewrite ^/inner_proxy/(.*):/(.*) /$2 break;
+            proxy_pass http://$1:;
+        }
+
+	As example above, if send subrequest to process whose workerid is 0, the uri will change to /inner_proxy/unix:/tmp/http.sock.80.0:/multiport_test/xxx
+	
+	proxy_pass will send current request to process 0 as inner proxy request.
 
 ## API
 
@@ -68,6 +91,23 @@ relationport must configured same as listen directives in http server, rtmp serv
 
 		ngx_process_slot for successd, NGX_ERROR for failed
 
+- ngx\_http\_inner\_proxy\_request
+
+		ngx_int_t ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid);
+
+	send a inner proxy request to specific process, must use with directives inner\_proxy
+	
+	- paras:
+
+		- r: http request for send inner request to sibling worker
+		- wpid: sibling worker process id
+	
+	- return values:
+
+		- NGX_OK: for successd
+		- NGX_ERROR: for failed
+		- NGX_DECLINED: for not configured
+
 ## Build
 
 cd to NGINX source directory & run this:
@@ -81,14 +121,15 @@ See t/ngx\_http\_process\_slot\_test\_module.c as reference
 
 **Build**:
 
-	./configure --with-debug --with-ipv6 --add-module=/path/to/nginx-multiport-module/t/ --add-module=/path/to/nginx-multiport-module/
+	./configure --with-debug --with-ipv6 --add-module=/path/to/nginx-multiport-module/t/ --add-module=/path/to/nginx-multiport-module/ --add-module=/path/to/echo-nginx-module/
+
 	make && make install
 
 **Configure**:
 
 	worker_processes  4;
 
-	rtmp_stream_zone  buckets=10007 streams=10000;
+	stream_zone  buckets=10007 streams=10000;
 
 	events {
 		...
