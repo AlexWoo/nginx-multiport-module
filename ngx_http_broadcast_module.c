@@ -212,27 +212,21 @@ ngx_http_broadcast_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_broadcast_module);
 
-    if (ctx == NULL) {  /* send to current process first */
+    if (ctx == NULL) {
         ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_broadcast_ctx_t));
         if (ctx == NULL) {
             return NGX_ERROR;
         }
 
         ngx_http_set_ctx(r, ctx, ngx_http_broadcast_module);
-
-        return ngx_http_broadcast_send_subrequest(r, ngx_process_slot);
     }
 
-    /* send to other process */
+    /* send to all process */
 
     ccf = (ngx_core_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                            ngx_core_module);
 
     while (ctx->workerid < ccf->worker_processes) {
-        if (ngx_process_slot == ngx_multiport_get_slot(ctx->workerid)) {
-            ++ctx->workerid;
-            continue;
-        }
 
         rc = ngx_http_broadcast_send_subrequest(r,
                 ngx_multiport_get_slot(ctx->workerid));
