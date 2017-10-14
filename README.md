@@ -106,7 +106,7 @@ relationport must configured same as listen directives in http server, rtmp serv
 
 		- NGX_OK: for successd
 		- NGX_ERROR: for failed
-		- NGX_DECLINED: for not configured
+		- NGX_DECLINED: for not configured or send inner proxy to self
 
 ## Build
 
@@ -129,18 +129,41 @@ See t/ngx\_http\_process\_slot\_test\_module.c as reference
 
 	worker_processes  4;
 
-	stream_zone  buckets=10007 streams=10000;
-
 	events {
 		...
+
 		multi_listen 9000 80;
 		multi_listen unix:/tmp/http.sock.80 80;
+	}
+	
+	http {
+		...
+
+		server {
+			...
+	
+			location /multiport_test/ {
+				inner_proxy unix:/tmp/http.sock.80 /inner_proxy;
+				multiport_test;
+			}
+
+			location /inner_proxy/ {
+				rewrite ^/inner_proxy/(.*):/(.*) /$2 break;
+				proxy_pass http://$1:;
+			}
+		}
 	}
 
 **Test for API**:
 
 	$ curl http://192.168.84.254/multiport_test/123
 	TEST cases 19, 19 pass
+
+If request send to worker1 to worker3, the request will proxy to worker 0. will get log as below:
+
+	2017/10/14 20:45:44 [error] 20065#0: *6 multiport test handler, client: 192.168.84.1, server: localhost, request: "GET /multiport_test/123 HTTP/1.1", host: "192.168.84.254:9003"
+	2017/10/14 20:45:44 [error] 20065#0: *6 inner proxy return 0, client: 192.168.84.1, server: localhost, request: "GET /multiport_test/123 HTTP/1.1", host: "192.168.84.254:9003"
+	2017/10/14 20:45:44 [error] 20062#0: *8 multiport test handler, client: unix:, server: localhost, request: "GET //multiport_test/123 HTTP/1.0", host: "localhost"
 
 **Test for multiport**:
 

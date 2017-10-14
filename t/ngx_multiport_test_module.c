@@ -89,15 +89,11 @@ ngx_multiport_test_handler(ngx_http_request_t *r)
     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
             "multiport test handler");
 
-    if (ngx_worker != 0) {
-        rc = ngx_http_inner_proxy_request(r, 0);
-        if (rc != NGX_DECLINED) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                    "inner proxy return %i", rc);
-            return rc;
-        }
+    rc = ngx_http_inner_proxy_request(r, 0);
+    if (rc != NGX_DECLINED) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                "inner proxy not configured");
+                "inner proxy return %i", rc);
+        return rc;
     }
 
     NGX_TEST_INIT

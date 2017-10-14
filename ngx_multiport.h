@@ -42,7 +42,7 @@ ngx_int_t ngx_multiport_get_slot(ngx_uint_t wpid);
  * return value:
  *      NGX_OK      : for successd
  *      NGX_ERROR   : for failed
- *      NGX_DECLINED: for not configured
+ *      NGX_DECLINED: for not configured or send inner proxy to self
  * paras:
  *      r   : http request for send inner request to sibling worker
  *      wpid: sibling worker process id
