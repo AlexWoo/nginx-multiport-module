@@ -190,7 +190,7 @@ ngx_http_inner_proxy_filter_init(ngx_conf_t *cf)
 
 
 ngx_int_t
-ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid)
+ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot)
 {
     ngx_http_inner_proxy_conf_t    *hipcf;
     ngx_http_inner_proxy_ctx_t     *ctx;
@@ -201,9 +201,9 @@ ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid)
         return NGX_DECLINED;
     }
 
-    if (wpid == ngx_worker) {
+    if (pslot == ngx_process_slot) {
         ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-                "inner proxy send request to self: %i", ngx_worker);
+                "inner proxy send request to self: %i", ngx_process_slot);
         return NGX_DECLINED;
     }
 
@@ -220,8 +220,8 @@ ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid)
     }
     ngx_http_set_ctx(r, ctx, ngx_http_inner_proxy_module);
 
-    if (ngx_multiport_get_port(r->pool, &ctx->port, &hipcf->multiport,
-                               ngx_multiport_get_slot(wpid)) == NGX_ERROR)
+    if (ngx_multiport_get_port(r->pool, &ctx->port, &hipcf->multiport, pslot)
+            == NGX_ERROR)
     {
         return NGX_ERROR;
     }

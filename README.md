@@ -93,14 +93,14 @@ relationport must configured same as listen directives in http server, rtmp serv
 
 - ngx\_http\_inner\_proxy\_request
 
-		ngx_int_t ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid);
+		ngx_int_t ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot);
 
 	send a inner proxy request to specific process, must use with directives inner\_proxy
 	
 	- paras:
 
 		- r: http request for send inner request to sibling worker
-		- wpid: sibling worker process id
+		- pslot: sibling worker ngx_process_slot
 	
 	- return values:
 

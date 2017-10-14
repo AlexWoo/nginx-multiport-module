@@ -44,10 +44,10 @@ ngx_int_t ngx_multiport_get_slot(ngx_uint_t wpid);
  *      NGX_ERROR   : for failed
  *      NGX_DECLINED: for not configured or send inner proxy to self
  * paras:
- *      r   : http request for send inner request to sibling worker
- *      wpid: sibling worker process id
+ *      r    : http request for send inner request to sibling worker
+ *      pslot: sibling worker ngx_process_slot
  */
-ngx_int_t ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_uint_t wpid);
+ngx_int_t ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot);
 
 
 #endif
