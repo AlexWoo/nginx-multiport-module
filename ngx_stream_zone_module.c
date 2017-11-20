@@ -406,7 +406,8 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
         return NULL;
     }
 
-    len = sizeof("ngx_stream_zone_buckets: \n") - 1 + NGX_OFF_T_LEN
+    len = sizeof("##########stream zone state##########\n") - 1
+        + sizeof("ngx_stream_zone_buckets: \n") - 1 + NGX_OFF_T_LEN
         + sizeof("ngx_stream_zone_streams: \n") - 1 + NGX_OFF_T_LEN
         + sizeof("ngx_stream_zone_alloc: \n") - 1 + NGX_OFF_T_LEN;
 
@@ -422,8 +423,10 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
     }
     cl->buf = b;
 
-    b->last = ngx_snprintf(b->last, len, "ngx_stream_zone_buckets: %i\n"
-            "ngx_stream_zone_streams: %i\nngx_stream_zone_alloc: %i\n",
+    b->last = ngx_snprintf(b->last, len,
+            "##########stream zone state##########\n"
+            "ngx_stream_zone_buckets: %i\nngx_stream_zone_streams: %i\n"
+            "ngx_stream_zone_alloc: %i\n",
             szcf->nbuckets, szcf->nstreams, *szcf->alloc);
 
     if (detail) {
