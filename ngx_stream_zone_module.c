@@ -407,9 +407,9 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
     }
 
     len = sizeof("##########stream zone state##########\n") - 1
-        + sizeof("ngx_stream_zone_buckets: \n") - 1 + NGX_OFF_T_LEN
-        + sizeof("ngx_stream_zone_streams: \n") - 1 + NGX_OFF_T_LEN
-        + sizeof("ngx_stream_zone_alloc: \n") - 1 + NGX_OFF_T_LEN;
+        + sizeof("ngx_stream_zone buckets: \n") - 1 + NGX_OFF_T_LEN
+        + sizeof("ngx_stream_zone streams: \n") - 1 + NGX_OFF_T_LEN
+        + sizeof("ngx_stream_zone alloc: \n") - 1 + NGX_OFF_T_LEN;
 
     cl = ngx_alloc_chain_link(r->pool);
     if (cl == NULL) {
@@ -425,8 +425,8 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
 
     b->last = ngx_snprintf(b->last, len,
             "##########stream zone state##########\n"
-            "ngx_stream_zone_buckets: %i\nngx_stream_zone_streams: %i\n"
-            "ngx_stream_zone_alloc: %i\n",
+            "ngx_stream_zone buckets: %i\nngx_stream_zone streams: %i\n"
+            "ngx_stream_zone alloc: %i\n",
             szcf->nbuckets, szcf->nstreams, *szcf->alloc);
 
     if (detail) {
