@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
     ngx_str_t                           port;
-    ngx_flag_t                          sent;
+    ngx_http_request_t                 *sr;
 } ngx_http_inner_proxy_ctx_t;
 
 
@@ -44,7 +44,7 @@ static ngx_command_t  ngx_http_inner_proxy_commands[] = {
 
 static ngx_http_module_t  ngx_http_inner_proxy_module_ctx = {
     NULL,                                   /* preconfiguration */
-    ngx_http_inner_proxy_filter_init,         /* postconfiguration */
+    ngx_http_inner_proxy_filter_init,       /* postconfiguration */
 
     NULL,                                   /* create main configuration */
     NULL,                                   /* init main configuration */
@@ -52,15 +52,15 @@ static ngx_http_module_t  ngx_http_inner_proxy_module_ctx = {
     NULL,                                   /* create server configuration */
     NULL,                                   /* merge server configuration */
 
-    ngx_http_inner_proxy_create_conf,         /* create location configuration */
-    ngx_http_inner_proxy_merge_conf           /* merge location configuration */
+    ngx_http_inner_proxy_create_conf,       /* create location configuration */
+    ngx_http_inner_proxy_merge_conf         /* merge location configuration */
 };
 
 
 ngx_module_t  ngx_http_inner_proxy_module = {
     NGX_MODULE_V1,
-    &ngx_http_inner_proxy_module_ctx,         /* module context */
-    ngx_http_inner_proxy_commands,            /* module directives */
+    &ngx_http_inner_proxy_module_ctx,       /* module context */
+    ngx_http_inner_proxy_commands,          /* module directives */
     NGX_HTTP_MODULE,                        /* module type */
     NULL,                                   /* init master */
     NULL,                                   /* init module */
@@ -73,6 +73,7 @@ ngx_module_t  ngx_http_inner_proxy_module = {
 };
 
 
+static ngx_http_output_header_filter_pt  ngx_http_next_header_filter;
 static ngx_http_output_body_filter_pt    ngx_http_next_body_filter;
 
 
@@ -123,15 +124,31 @@ ngx_http_inner_proxy(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 
 static ngx_int_t
+ngx_http_inner_proxy_header_filter(ngx_http_request_t *r)
+{
+    ngx_http_inner_proxy_ctx_t     *ctx;
+
+    ctx = ngx_http_get_module_ctx(r->main, ngx_http_inner_proxy_module);
+
+    if (ctx == NULL) { /* not configured */
+        return ngx_http_next_header_filter(r);
+    }
+
+    if (r == r->main) {
+        return NGX_OK;
+    }
+
+    r->main->headers_out = r->headers_out;
+
+    return ngx_http_next_header_filter(r->main);
+}
+
+
+static ngx_int_t
 ngx_http_inner_proxy_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 {
-    ngx_http_inner_proxy_conf_t    *hipcf;
     ngx_http_inner_proxy_ctx_t     *ctx;
-    ngx_http_request_t             *sr;
-    ngx_int_t                       rc;
-    ngx_str_t                       uri;
-    ngx_buf_t                      *b;
-    ngx_chain_t                     cl;
+    ngx_chain_t                    *cl;
 
     ctx = ngx_http_get_module_ctx(r->main, ngx_http_inner_proxy_module);
 
@@ -139,49 +156,26 @@ ngx_http_inner_proxy_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
         return ngx_http_next_body_filter(r, in);
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-            "inner proxy body filter, r:%p r->main:%p", r, r->main);
-
-    if (r != r->main) { /* send subrequest */
-        return ngx_http_next_body_filter(r, in);
+    if (r == r->main) {
+        return NGX_OK;
     }
 
-    if (ctx->sent == 0) {
-        hipcf = ngx_http_get_module_loc_conf(r, ngx_http_inner_proxy_module);
-
-        uri.len = hipcf->uri.len + 1 + ctx->port.len + 2 + r->uri.len;
-        uri.data = ngx_pcalloc(r->pool, uri.len);
-        ngx_snprintf(uri.data, uri.len, "%V/%V:/%V",
-                &hipcf->uri, &ctx->port, &r->uri);
-
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                "inner proxy send request to %V", &ctx->port);
-        rc = ngx_http_subrequest(r, &uri, &r->args, &sr, NULL, 0);
-        sr->method = r->method;
-        sr->method_name = r->method_name;
-
-        ctx->sent = 1;
-
-        return rc;
+    for (cl = in; cl; cl = cl->next) {
+        if (cl->buf->last_in_chain) {
+            cl->buf->last_buf = 1;
+        }
     }
 
-    b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
-
-    if (b == NULL) {
-        return NGX_ERROR;
-    }
-
-    b->last_buf = 1;
-    cl.buf = b;
-    cl.next = NULL;
-
-    return ngx_http_next_body_filter(r, &cl);
+    return ngx_http_next_body_filter(r, in);
 }
 
 
 static ngx_int_t
 ngx_http_inner_proxy_filter_init(ngx_conf_t *cf)
 {
+    ngx_http_next_header_filter = ngx_http_top_header_filter;
+    ngx_http_top_header_filter = ngx_http_inner_proxy_header_filter;
+
     ngx_http_next_body_filter = ngx_http_top_body_filter;
     ngx_http_top_body_filter = ngx_http_inner_proxy_body_filter;
 
@@ -194,6 +188,8 @@ ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot)
 {
     ngx_http_inner_proxy_conf_t    *hipcf;
     ngx_http_inner_proxy_ctx_t     *ctx;
+    ngx_str_t                       uri;
+    ngx_int_t                       rc;
 
     hipcf = ngx_http_get_module_loc_conf(r, ngx_http_inner_proxy_module);
 
@@ -226,8 +222,16 @@ ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot)
         return NGX_ERROR;
     }
 
-    r->headers_out.status = NGX_HTTP_OK;
-    ngx_http_send_header(r);
+    uri.len = hipcf->uri.len + 1 + ctx->port.len + 2 + r->uri.len;
+    uri.data = ngx_pcalloc(r->pool, uri.len);
+    ngx_snprintf(uri.data, uri.len, "%V/%V:/%V",
+            &hipcf->uri, &ctx->port, &r->uri);
 
-    return ngx_http_output_filter(r, NULL);
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+            "inner proxy send request to %V", &ctx->port);
+    rc = ngx_http_subrequest(r, &uri, &r->args, &ctx->sr, NULL, 0);
+    ctx->sr->method = r->method;
+    ctx->sr->method_name = r->method_name;
+
+    return rc;
 }

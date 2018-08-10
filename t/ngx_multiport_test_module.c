@@ -90,10 +90,14 @@ ngx_multiport_test_handler(ngx_http_request_t *r)
             "multiport test handler");
 
     rc = ngx_http_inner_proxy_request(r, ngx_multiport_get_slot(0));
-    if (rc != NGX_DECLINED) {
+    if (rc == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+
+    if (rc == NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                 "inner proxy return %i", rc);
-        return rc;
+        return NGX_DONE;
     }
 
     NGX_TEST_INIT
