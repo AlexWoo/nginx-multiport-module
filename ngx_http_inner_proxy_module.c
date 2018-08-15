@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
     ngx_str_t                           port;
-    ngx_http_request_t                 *sr;
+    ngx_flag_t                          last;
 } ngx_http_inner_proxy_ctx_t;
 
 
@@ -148,7 +148,8 @@ static ngx_int_t
 ngx_http_inner_proxy_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
 {
     ngx_http_inner_proxy_ctx_t     *ctx;
-    ngx_chain_t                    *cl;
+    ngx_chain_t                    *cl, l;
+    ngx_buf_t                      *b;
 
     ctx = ngx_http_get_module_ctx(r->main, ngx_http_inner_proxy_module);
 
@@ -157,12 +158,27 @@ ngx_http_inner_proxy_body_filter(ngx_http_request_t *r, ngx_chain_t *in)
     }
 
     if (r == r->main) {
-        return NGX_OK;
+        if (ctx->last == 0) {
+            return NGX_OK;
+        }
+
+        b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+
+        if (b == NULL) {
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+
+        b->last_buf = 1;
+
+        l.buf = b;
+        l.next = NULL;
+
+        return ngx_http_next_body_filter(r, &l);
     }
 
     for (cl = in; cl; cl = cl->next) {
         if (cl->buf->last_in_chain) {
-            cl->buf->last_buf = 1;
+            ctx->last = 1;
         }
     }
 
@@ -188,6 +204,7 @@ ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot)
 {
     ngx_http_inner_proxy_conf_t    *hipcf;
     ngx_http_inner_proxy_ctx_t     *ctx;
+    ngx_http_request_t             *sr;
     ngx_str_t                       uri;
     ngx_int_t                       rc;
 
@@ -229,9 +246,9 @@ ngx_http_inner_proxy_request(ngx_http_request_t *r, ngx_int_t pslot)
 
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
             "inner proxy send request to %V", &ctx->port);
-    rc = ngx_http_subrequest(r, &uri, &r->args, &ctx->sr, NULL, 0);
-    ctx->sr->method = r->method;
-    ctx->sr->method_name = r->method_name;
+    rc = ngx_http_subrequest(r, &uri, &r->args, &sr, NULL, 0);
+    sr->method = r->method;
+    sr->method_name = r->method_name;
 
     return rc;
 }
