@@ -10,7 +10,7 @@
 
 
 typedef struct {
-	ngx_str_t                           multiport;
+    ngx_str_t                           multiport;
     ngx_str_t                           uri;
 } ngx_http_inner_proxy_conf_t;
 

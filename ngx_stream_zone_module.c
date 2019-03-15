@@ -26,7 +26,8 @@ typedef struct {
 } ngx_stream_zone_node_t;
 
 typedef struct {
-    ngx_atomic_t                        lock; /* mutex lock */
+    ngx_shmtx_t                         mutex;
+    ngx_shmtx_sh_t                      lock;
     ngx_int_t                           node; /* idx of stream node */
 } ngx_stream_zone_hash_t;
 
@@ -151,7 +152,7 @@ ngx_stream_zone_clear(ngx_cycle_t *cycle)
 
     for (idx = 0; idx < szcf->nbuckets; ++idx) {
 
-        ngx_spinlock(&szcf->hash[idx].lock, 1, 2048);
+        ngx_shmtx_lock(&szcf->hash[idx].mutex);
         cur = -1;
 
         while (1) {
@@ -178,7 +179,7 @@ ngx_stream_zone_clear(ngx_cycle_t *cycle)
 
             cur = next;
         }
-        ngx_unlock(&szcf->hash[idx].lock);
+        ngx_shmtx_unlock(&szcf->hash[idx].mutex);
     }
 }
 
@@ -196,8 +197,9 @@ ngx_stream_zone_exit_process(ngx_cycle_t *cycle)
     ngx_stream_zone_clear(cycle);
 }
 
-static void
-ngx_stream_zone_shm_init(ngx_shm_t *shm, ngx_stream_zone_conf_t *szcf)
+static char *
+ngx_stream_zone_shm_init(ngx_conf_t *cf, ngx_shm_t *shm,
+    ngx_stream_zone_conf_t *szcf)
 {
     u_char                             *p;
     ngx_int_t                           i, next;
@@ -217,6 +219,27 @@ ngx_stream_zone_shm_init(ngx_shm_t *shm, ngx_stream_zone_conf_t *szcf)
 
     /* init shm zone */
     for (i = 0; i < szcf->nbuckets; ++i) {
+#if (NGX_HAVE_ATOMIC_OPS)
+
+        p = NULL;
+
+#else
+        p = ngx_pnalloc(cf->pool, cf->cycle->lock_file.len + stream_zone_key.len
+                + NGX_INT32_LEN);
+        if (p == NULL) {
+            return NGX_CONF_ERROR;
+        }
+        (void) ngx_sprintf(p, "%V%V%d", &cf->cycle->lock_file,
+                           &stream_zone_key, i);
+
+#endif
+
+        if (ngx_shmtx_create(&szcf->hash[i].mutex, &szcf->hash[i].lock, p)
+                != NGX_OK)
+        {
+            return NGX_CONF_ERROR;
+        }
+
         szcf->hash[i].node = -1;
     }
 
@@ -234,6 +257,8 @@ ngx_stream_zone_shm_init(ngx_shm_t *shm, ngx_stream_zone_conf_t *szcf)
 
     *szcf->free_node = i;
     *szcf->alloc = 0;
+
+    return NGX_CONF_OK;
 }
 
 static char *
@@ -291,9 +316,7 @@ ngx_stream_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         return NGX_CONF_ERROR;
     }
 
-    ngx_stream_zone_shm_init(&shm, szcf);
-
-    return NGX_CONF_OK;
+    return ngx_stream_zone_shm_init(cf, &shm, szcf);
 }
 
 
@@ -314,7 +337,7 @@ ngx_stream_zone_insert_stream(ngx_str_t *name)
 
     idx = ngx_hash_key(name->data, name->len) % szcf->nbuckets;
 
-    ngx_spinlock(&szcf->hash[idx].lock, 1, 2048);
+    ngx_shmtx_lock(&szcf->hash[idx].mutex);
     i = szcf->hash[idx].node;
     pslot = -1;
     while (i != -1) {
@@ -332,7 +355,7 @@ ngx_stream_zone_insert_stream(ngx_str_t *name)
     if (i == -1) { /* stream not in hash */
         node = ngx_stream_zone_get_node(name, ngx_process_slot);
         if (node == NULL) {
-            ngx_unlock(&szcf->hash[idx].lock);
+            ngx_shmtx_unlock(&szcf->hash[idx].mutex);
             return NGX_ERROR;
         }
         node->slot = ngx_process_slot;
@@ -342,7 +365,7 @@ ngx_stream_zone_insert_stream(ngx_str_t *name)
 
         pslot = ngx_process_slot;
     }
-    ngx_unlock(&szcf->hash[idx].lock);
+    ngx_shmtx_unlock(&szcf->hash[idx].mutex);
 
     return pslot;
 }
@@ -363,7 +386,7 @@ ngx_stream_zone_delete_stream(ngx_str_t *name)
 
     idx = ngx_hash_key(name->data, name->len) % szcf->nbuckets;
 
-    ngx_spinlock(&szcf->hash[idx].lock, 1, 2048);
+    ngx_shmtx_lock(&szcf->hash[idx].mutex);
     cur = -1;
     next = szcf->hash[idx].node;
     while (next != -1) {
@@ -387,7 +410,7 @@ ngx_stream_zone_delete_stream(ngx_str_t *name)
         cur = next;
         next = szcf->stream_node[next].next;
     }
-    ngx_unlock(&szcf->hash[idx].lock);
+    ngx_shmtx_unlock(&szcf->hash[idx].mutex);
 }
 
 ngx_chain_t *
@@ -431,11 +454,11 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
 
     if (detail) {
         for (idx = 0; idx < szcf->nbuckets; ++idx) {
-            ngx_spinlock(&szcf->hash[idx].lock, 1, 2048);
+            ngx_shmtx_lock(&szcf->hash[idx].mutex);
 
             next = szcf->hash[idx].node;
             if (next == -1) {
-                ngx_unlock(&szcf->hash[idx].lock);
+                ngx_shmtx_unlock(&szcf->hash[idx].mutex);
                 continue;
             }
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "slot: %i", idx);
@@ -451,7 +474,7 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
                 next = szcf->stream_node[next].next;
             }
 
-            ngx_unlock(&szcf->hash[idx].lock);
+            ngx_shmtx_unlock(&szcf->hash[idx].mutex);
         }
     }
 
