@@ -14,7 +14,7 @@ static void *ngx_stream_zone_create_conf(ngx_cycle_t *cf);
 static char *ngx_stream_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 
-#define NAME_LEN    256
+#define NAME_LEN    1024
 
 static ngx_str_t stream_zone_key = ngx_string("stream_zone");
 
@@ -95,7 +95,7 @@ ngx_stream_zone_get_node(ngx_str_t *name, ngx_int_t pslot)
     node = &szcf->stream_node[*szcf->free_node];
     *szcf->free_node = node->next;
 
-    *ngx_copy(node->name, name->data, ngx_min(NAME_LEN, name->len)) = '\0';
+    *ngx_copy(node->name, name->data, ngx_min(NAME_LEN - 1, name->len)) = '\0';
     node->slot = pslot;
     node->next = -1;
 
@@ -141,7 +141,7 @@ static void
 ngx_stream_zone_clear(ngx_cycle_t *cycle)
 {
     ngx_stream_zone_conf_t             *szcf;
-    ngx_int_t                           idx, cur, next;
+    volatile ngx_int_t                  idx, cur, next;
 
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(cycle->conf_ctx,
                                       ngx_stream_zone_module);
@@ -324,14 +324,20 @@ ngx_int_t
 ngx_stream_zone_insert_stream(ngx_str_t *name)
 {
     ngx_stream_zone_conf_t             *szcf;
-    ngx_uint_t                          idx;
-    ngx_int_t                           i, pslot;
+    volatile ngx_uint_t                 idx;
+    volatile ngx_int_t                  i, pslot;
     ngx_stream_zone_node_t             *node;
 
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                       ngx_stream_zone_module);
 
     if (szcf->nbuckets <= 0 || szcf->nstreams <= 0) {
+        return NGX_ERROR;
+    }
+
+    if (name->len >= NAME_LEN) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                "stream name(%V) too long", name);
         return NGX_ERROR;
     }
 
@@ -356,6 +362,8 @@ ngx_stream_zone_insert_stream(ngx_str_t *name)
         node = ngx_stream_zone_get_node(name, ngx_process_slot);
         if (node == NULL) {
             ngx_shmtx_unlock(&szcf->hash[idx].mutex);
+            ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                    "stream zone get node failed");
             return NGX_ERROR;
         }
         node->slot = ngx_process_slot;
@@ -374,8 +382,8 @@ void
 ngx_stream_zone_delete_stream(ngx_str_t *name)
 {
     ngx_stream_zone_conf_t             *szcf;
-    ngx_uint_t                          idx;
-    ngx_int_t                           cur, next;
+    volatile ngx_uint_t                 idx;
+    volatile ngx_int_t                  cur, next;
 
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                       ngx_stream_zone_module);
@@ -420,7 +428,7 @@ ngx_stream_zone_state(ngx_http_request_t *r, ngx_flag_t detail)
     ngx_chain_t                        *cl;
     ngx_buf_t                          *b;
     size_t                              len;
-    ngx_int_t                           idx, next;
+    volatile ngx_int_t                  idx, next;
 
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                       ngx_stream_zone_module);
