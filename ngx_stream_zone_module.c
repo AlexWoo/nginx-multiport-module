@@ -35,7 +35,8 @@ typedef struct {
     ngx_int_t                           nbuckets;
     ngx_int_t                           nstreams;
 
-    ngx_shm_zone_t                     *shm_zone;
+    ngx_shmtx_t                        *mutex;
+    ngx_shmtx_sh_t                     *lock;
     ngx_stream_zone_hash_t             *hash;       /* hash in shm */
     ngx_stream_zone_node_t             *stream_node;/* node in shm */
     ngx_int_t                          *free_node;  /* free node chain */
@@ -88,7 +89,10 @@ ngx_stream_zone_get_node(ngx_str_t *name, ngx_int_t pslot)
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                       ngx_stream_zone_module);
 
+    ngx_shmtx_lock(szcf->mutex);
+
     if (*szcf->free_node == -1) {
+        ngx_shmtx_unlock(szcf->mutex);
         return NULL;
     }
 
@@ -100,6 +104,8 @@ ngx_stream_zone_get_node(ngx_str_t *name, ngx_int_t pslot)
     node->next = -1;
 
     ++*szcf->alloc;
+
+    ngx_shmtx_unlock(szcf->mutex);
 
     return node;
 }
@@ -113,12 +119,16 @@ ngx_stream_zone_put_node(ngx_int_t idx)
     szcf = (ngx_stream_zone_conf_t *) ngx_get_conf(ngx_cycle->conf_ctx,
                                       ngx_stream_zone_module);
 
+    ngx_shmtx_lock(szcf->mutex);
+
     node = &szcf->stream_node[idx];
 
     node->next = *szcf->free_node;
     *szcf->free_node = idx;
 
     --*szcf->alloc;
+
+    ngx_shmtx_unlock(szcf->mutex);
 }
 
 static void *
@@ -206,6 +216,12 @@ ngx_stream_zone_shm_init(ngx_conf_t *cf, ngx_shm_t *shm,
 
     p = shm->addr;
 
+    szcf->mutex = (ngx_shmtx_t *) p;
+    p += sizeof(ngx_shmtx_t);
+
+    szcf->lock = (ngx_shmtx_sh_t *) p;
+    p += sizeof(ngx_shmtx_sh_t);
+
     szcf->hash = (ngx_stream_zone_hash_t *) p;
     p += sizeof(ngx_stream_zone_hash_t) * szcf->nbuckets;
 
@@ -218,6 +234,24 @@ ngx_stream_zone_shm_init(ngx_conf_t *cf, ngx_shm_t *shm,
     szcf->alloc = (ngx_int_t *) p;
 
     /* init shm zone */
+#if (NGX_HAVE_ATOMIC_OPS)
+
+    p = NULL;
+
+#else
+        p = ngx_pnalloc(cf->pool, cf->cycle->lock_file.len
+                + stream_zone_key.len);
+        if (p == NULL) {
+            return NGX_CONF_ERROR;
+        }
+        ngx_sprintf(p, "%V%V", &cf->cycle->lock_file, &stream_zone_key) = 0;
+
+#endif
+
+        if (ngx_shmtx_create(szcf->mutex, szcf->lock, p) != NGX_OK) {
+            return NGX_CONF_ERROR;
+        }
+
     for (i = 0; i < szcf->nbuckets; ++i) {
 #if (NGX_HAVE_ATOMIC_OPS)
 
@@ -229,8 +263,8 @@ ngx_stream_zone_shm_init(ngx_conf_t *cf, ngx_shm_t *shm,
         if (p == NULL) {
             return NGX_CONF_ERROR;
         }
-        (void) ngx_sprintf(p, "%V%V%d", &cf->cycle->lock_file,
-                           &stream_zone_key, i);
+        ngx_sprintf(p, "%V%V%d", &cf->cycle->lock_file,
+                           &stream_zone_key, i) = 0;
 
 #endif
 
@@ -304,7 +338,8 @@ ngx_stream_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     /* create shm zone */
-    len = sizeof(ngx_stream_zone_hash_t) * szcf->nbuckets
+    len = sizeof(ngx_shmtx_t) + sizeof(ngx_shmtx_sh_t)
+        + sizeof(ngx_stream_zone_hash_t) * szcf->nbuckets
         + sizeof(ngx_stream_zone_node_t) * szcf->nstreams
         + sizeof(ngx_int_t) + sizeof(ngx_int_t);
 
